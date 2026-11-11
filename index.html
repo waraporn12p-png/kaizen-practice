@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>แจ้งซ่อมอุปกรณ์ออฟฟิศ</title>
+  </head>
+  <body>
+    <h1>แจ้งซ่อมอุปกรณ์ออฟฟิศ</h1>
+    <p>กรอกข้อมูลแล้วกดปุ่ม "แจ้งซ่อม"</p>
+
+    <form id="repairForm">
+      <label>ชื่อผู้แจ้ง</label><br>
+      <input type="text" id="reporter" placeholder="เช่น สมชาย"><br><br>
+
+      <label>อุปกรณ์</label><br>
+      <select id="equipment">
+        <option value="">-- เลือกอุปกรณ์ --</option>
+        <option>คอมพิวเตอร์</option>
+        <option>เครื่องพิมพ์</option>
+        <option>แอร์</option>
+        <option>อื่น ๆ</option>
+      </select><br><br>
+
+      <label>สถานที่</label><br>
+      <input type="text" id="location" placeholder="เช่น ห้องประชุม 2"><br><br>
+
+      <label>อาการเสีย</label><br>
+      <textarea id="detail" rows="4" placeholder="อธิบายอาการ"></textarea><br><br>
+
+      <button type="submit" id="submitBtn">แจ้งซ่อม</button>
+    </form>
+
+    <p id="msg"></p>
+
+    <script>
+      // ===== 1) ใส่ URL ของ Apps Script (ลงท้าย /exec) =====
+      const API_URL = 'https://script.google.com/macros/s/AKfycby4Vc6jrYgZbBf45Wpto7LYTRP3Opsz6nGJLr3fEtqb-nDd9Hi4G6rSVdFft4SDdS2e/exec';
+
+      const form = document.getElementById('repairForm');
+      const msg = document.getElementById('msg');
+      const btn = document.getElementById('submitBtn');
+
+      // ===== 2) เมื่อกดปุ่มแจ้งซ่อม =====
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();   // ไม่ให้หน้ารีเฟรชเอง
+
+        // 3) เก็บค่าจากฟอร์ม
+        const data = {
+          reporter:  document.getElementById('reporter').value.trim(),
+          equipment: document.getElementById('equipment').value,
+          location:  document.getElementById('location').value.trim(),
+          detail:    document.getElementById('detail').value.trim()
+        };
+
+        // 4) ตรวจว่ากรอกครบไหม
+        if (!data.reporter || !data.equipment) {
+          msg.textContent = '⚠️ กรุณากรอกชื่อและเลือกอุปกรณ์';
+          return;
+        }
+
+        msg.textContent = '⏳ กำลังส่ง...';
+        btn.disabled = true;      // กันกดซ้ำ
+
+        // 5) ส่งข้อมูลไป Apps Script
+        try {
+          const res = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(data)
+          });
+          const result = await res.json();
+
+          if (result.ok) {
+            msg.textContent = '✅ แจ้งซ่อมสำเร็จ เลขงาน: ' + result.id;
+            form.reset();         // ล้างฟอร์ม
+          } else {
+            msg.textContent = '❌ ระบบแจ้งข้อผิดพลาด: ' + result.error;
+          }
+        } catch (err) {
+          msg.textContent = '❌ ส่งไม่สำเร็จ: ' + err.message;
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
