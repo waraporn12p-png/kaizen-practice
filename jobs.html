@@ -10,6 +10,7 @@
       table { border-collapse: collapse; width: 100%; }
       th, td { border: 1px solid #ccc; padding: 6px; font-size: 14px; white-space: nowrap; }
       th { background: #f0f0f0; }
+      input[type=file] { max-width: 180px; }
     </style>
   </head>
   <body>
@@ -24,6 +25,7 @@
           <tr>
             <th>เลขงาน</th><th>วันที่</th><th>ผู้แจ้ง</th><th>อุปกรณ์</th>
             <th>สถานที่</th><th>อาการ</th><th>สถานะ</th><th></th>
+            <th>รูป After</th><th>แนบรูป</th>
           </tr>
         </thead>
         <tbody id="jobList"></tbody>
@@ -37,7 +39,19 @@
       const jobList = document.getElementById('jobList');
       const msg = document.getElementById('msg');
 
-      // ===== 1) โหลดรายการงาน (เรียก doGet) =====
+      // ===== ตัวช่วย: ส่งคำสั่ง POST ไป Apps Script =====
+      async function postToApi(payload) {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        if (!result.ok) throw new Error(result.error);
+        return result;
+      }
+
+      // ===== 1) โหลดรายการงาน =====
       async function loadJobs() {
         msg.textContent = '⏳ กำลังโหลด...';
         try {
@@ -57,7 +71,6 @@
         jobs.forEach(job => {
           const tr = document.createElement('tr');
 
-          // ข้อมูลทั่วไป
           [job.id, job.timestamp, job.reporter, job.equipment, job.location, job.detail]
             .forEach(text => {
               const td = document.createElement('td');
@@ -78,7 +91,7 @@
           tdStatus.appendChild(select);
           tr.appendChild(tdStatus);
 
-          // ปุ่มบันทึก
+          // ปุ่มบันทึกสถานะ
           const tdBtn = document.createElement('td');
           const btn = document.createElement('button');
           btn.textContent = 'บันทึก';
@@ -86,22 +99,41 @@
           tdBtn.appendChild(btn);
           tr.appendChild(tdBtn);
 
+          // ลิงก์ดูรูป (แสดงเฉพาะลิงก์ของ Google Drive)
+          const tdPhoto = document.createElement('td');
+          if (typeof job.photoUrl === 'string' && job.photoUrl.startsWith('https://drive.google.com/')) {
+            const a = document.createElement('a');
+            a.href = job.photoUrl;
+            a.target = '_blank';
+            a.textContent = '📷 ดูรูป';
+            tdPhoto.appendChild(a);
+          } else {
+            tdPhoto.textContent = '-';
+          }
+          tr.appendChild(tdPhoto);
+
+          // เลือกรูป + ปุ่มอัปโหลด
+          const tdUpload = document.createElement('td');
+          const fileInput = document.createElement('input');
+          fileInput.type = 'file';
+          fileInput.accept = 'image/*';      // มือถือจะมีตัวเลือก "ถ่ายรูป"
+          const upBtn = document.createElement('button');
+          upBtn.textContent = 'อัปโหลด';
+          upBtn.addEventListener('click', () => uploadPhoto(job.id, fileInput, upBtn));
+          tdUpload.appendChild(fileInput);
+          tdUpload.appendChild(upBtn);
+          tr.appendChild(tdUpload);
+
           jobList.appendChild(tr);
         });
       }
 
-      // ===== 3) เปลี่ยนสถานะ (เรียก doPost action=updateStatus) =====
+      // ===== 3) เปลี่ยนสถานะ =====
       async function updateStatus(id, status, btn) {
         btn.disabled = true;
         btn.textContent = '⏳';
         try {
-          const res = await fetch(API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({ action: 'updateStatus', id: id, status: status })
-          });
-          const result = await res.json();
-          if (!result.ok) throw new Error(result.error);
+          await postToApi({ action: 'updateStatus', id: id, status: status });
           msg.textContent = '✅ ' + id + ' → ' + status;
         } catch (err) {
           msg.textContent = '❌ ' + err.message;
@@ -111,8 +143,54 @@
         }
       }
 
+      // ===== 4) ย่อรูปให้เล็กลง แล้วแปลงเป็นข้อความ (base64) =====
+      function resizeImage(file, maxSize = 1280, quality = 0.8) {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            let w = img.width, h = img.height;
+            if (w > h && w > maxSize) { h = Math.round(h * maxSize / w); w = maxSize; }
+            else if (h > maxSize)      { w = Math.round(w * maxSize / h); h = maxSize; }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            URL.revokeObjectURL(img.src);
+
+            const dataUrl = canvas.toDataURL('image/jpeg', quality);
+            resolve(dataUrl.split(',')[1]);   // เอาเฉพาะส่วนข้อมูลรูป
+          };
+          img.onerror = () => reject(new Error('อ่านไฟล์รูปไม่ได้'));
+          img.src = URL.createObjectURL(file);
+        });
+      }
+
+      // ===== 5) อัปโหลดรูป =====
+      async function uploadPhoto(id, fileInput, btn) {
+        const file = fileInput.files[0];
+        if (!file) {
+          msg.textContent = '⚠️ กรุณาเลือกรูปก่อนกดอัปโหลด';
+          return;
+        }
+        btn.disabled = true;
+        btn.textContent = '⏳';
+        msg.textContent = '⏳ กำลังอัปโหลดรูปของ ' + id + '...';
+        try {
+          const base64 = await resizeImage(file);
+          await postToApi({ action: 'uploadPhoto', id: id, mimeType: 'image/jpeg', data: base64 });
+          msg.textContent = '✅ อัปโหลดรูปของ ' + id + ' แล้ว';
+          loadJobs();   // โหลดตารางใหม่ให้เห็นลิงก์
+        } catch (err) {
+          msg.textContent = '❌ ' + err.message;
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'อัปโหลด';
+        }
+      }
+
       document.getElementById('reloadBtn').addEventListener('click', loadJobs);
-      loadJobs();   // โหลดทันทีเมื่อเปิดหน้า
+      loadJobs();
     </script>
   </body>
 </html>
