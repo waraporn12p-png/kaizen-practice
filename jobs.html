@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>รายการงานซ่อม</title>
+    <style>
+      body { font-family: sans-serif; padding: 12px; }
+      .table-wrap { overflow-x: auto; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #ccc; padding: 6px; font-size: 14px; white-space: nowrap; }
+      th { background: #f0f0f0; }
+    </style>
+  </head>
+  <body>
+    <h1>รายการงานซ่อม</h1>
+    <button id="reloadBtn">🔄 โหลดใหม่</button>
+    <a href="index.html">+ แจ้งซ่อมใหม่</a>
+    <p id="msg"></p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>เลขงาน</th><th>วันที่</th><th>ผู้แจ้ง</th><th>อุปกรณ์</th>
+            <th>สถานที่</th><th>อาการ</th><th>สถานะ</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="jobList"></tbody>
+      </table>
+    </div>
+
+    <script>
+      const API_URL = 'https://script.google.com/macros/s/AKfycby4Vc6jrYgZbBf45Wpto7LYTRP3Opsz6nGJLr3fEtqb-nDd9Hi4G6rSVdFft4SDdS2e/exec';
+      const STATUSES = ['รออนุมัติ', 'อนุมัติ', 'ไม่อนุมัติ', 'กำลังซ่อม', 'เสร็จแล้ว'];
+
+      const jobList = document.getElementById('jobList');
+      const msg = document.getElementById('msg');
+
+      // ===== 1) โหลดรายการงาน (เรียก doGet) =====
+      async function loadJobs() {
+        msg.textContent = '⏳ กำลังโหลด...';
+        try {
+          const res = await fetch(API_URL);
+          const result = await res.json();
+          if (!result.ok) throw new Error(result.error);
+          renderJobs(result.data);
+          msg.textContent = 'ทั้งหมด ' + result.data.length + ' งาน';
+        } catch (err) {
+          msg.textContent = '❌ โหลดไม่สำเร็จ: ' + err.message;
+        }
+      }
+
+      // ===== 2) สร้างแถวในตาราง =====
+      function renderJobs(jobs) {
+        jobList.innerHTML = '';
+        jobs.forEach(job => {
+          const tr = document.createElement('tr');
+
+          // ข้อมูลทั่วไป
+          [job.id, job.timestamp, job.reporter, job.equipment, job.location, job.detail]
+            .forEach(text => {
+              const td = document.createElement('td');
+              td.textContent = text;
+              tr.appendChild(td);
+            });
+
+          // Dropdown สถานะ
+          const tdStatus = document.createElement('td');
+          const select = document.createElement('select');
+          STATUSES.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s;
+            opt.textContent = s;
+            if (s === job.status) opt.selected = true;
+            select.appendChild(opt);
+          });
+          tdStatus.appendChild(select);
+          tr.appendChild(tdStatus);
+
+          // ปุ่มบันทึก
+          const tdBtn = document.createElement('td');
+          const btn = document.createElement('button');
+          btn.textContent = 'บันทึก';
+          btn.addEventListener('click', () => updateStatus(job.id, select.value, btn));
+          tdBtn.appendChild(btn);
+          tr.appendChild(tdBtn);
+
+          jobList.appendChild(tr);
+        });
+      }
+
+      // ===== 3) เปลี่ยนสถานะ (เรียก doPost action=updateStatus) =====
+      async function updateStatus(id, status, btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳';
+        try {
+          const res = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action: 'updateStatus', id: id, status: status })
+          });
+          const result = await res.json();
+          if (!result.ok) throw new Error(result.error);
+          msg.textContent = '✅ ' + id + ' → ' + status;
+        } catch (err) {
+          msg.textContent = '❌ ' + err.message;
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'บันทึก';
+        }
+      }
+
+      document.getElementById('reloadBtn').addEventListener('click', loadJobs);
+      loadJobs();   // โหลดทันทีเมื่อเปิดหน้า
+    </script>
+  </body>
+</html>
