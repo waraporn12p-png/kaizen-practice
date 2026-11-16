@@ -40,6 +40,11 @@
       const form = document.getElementById('repairForm');
       const msg = document.getElementById('msg');
       const btn = document.getElementById('submitBtn');
+      // ===== เติมสถานที่จาก QR อัตโนมัติ (เช่น ...?loc=ห้องHR) =====
+      const qrLoc = new URLSearchParams(window.location.search).get('loc');
+      if (qrLoc) {
+        document.getElementById('location').value = qrLoc;
+      }
 
       // ===== 2) เมื่อกดปุ่มแจ้งซ่อม =====
       form.addEventListener('submit', async (event) => {
