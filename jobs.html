@@ -4,18 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>รายการงานซ่อม</title>
-    <style>
-      body { font-family: sans-serif; padding: 12px; }
-      .hidden { display: none; }
-      .box { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; max-width: 360px; }
-      .table-wrap { overflow-x: auto; }
-      table { border-collapse: collapse; width: 100%; }
-      th, td { border: 1px solid #ccc; padding: 6px; font-size: 14px; white-space: nowrap; }
-      th { background: #f0f0f0; }
-      td button { margin-right: 4px; }
-      input[type=file] { max-width: 170px; }
-    </style>
-  </head>
+       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600&display=swap">
+    <link rel="stylesheet" href="style.css">  </head>
   <body>
     <h1>รายการงานซ่อม</h1>
 
@@ -59,6 +49,10 @@
         technician: { 'อนุมัติ': ['กำลังซ่อม'], 'กำลังซ่อม': ['เสร็จแล้ว'] }
       };
       const ROLE_NAMES = { supervisor: 'หัวหน้า', technician: 'ช่าง' };
+      const STATUS_CLASS = {
+        'รออนุมัติ': 'wait', 'อนุมัติ': 'ok', 'ไม่อนุมัติ': 'no',
+        'กำลังซ่อม': 'doing', 'เสร็จแล้ว': 'done'
+      };
 
       let currentRole = null;
       let currentPin = '';
@@ -135,7 +129,13 @@
               td.textContent = text;
               tr.appendChild(td);
             });
-
+          // เปลี่ยนช่องสถานะเป็นป้ายสี
+          const statusTd = tr.lastChild;
+          statusTd.textContent = '';
+          const badge = document.createElement('span');
+          badge.className = 'badge ' + (STATUS_CLASS[job.status] || '');
+          badge.textContent = job.status;
+          statusTd.appendChild(badge);
           // ช่องดำเนินการ: แสดงเฉพาะปุ่มที่บทบาทนี้กดได้
           const tdAction = document.createElement('td');
           const nextList = currentRole ? (TRANSITIONS[currentRole][job.status] || []) : [];
